@@ -17,13 +17,15 @@ import (
 
 const (
 	buildHATResetPin = 4
+	buildHATBootPin  = 22
 )
 
 var (
 	cli struct {
-		Port  string
-		Reset struct{} `cmd help:"Reset BuildHAT."`
-		Start struct{} `cmd help:"Start the BuildHAT."`
+		Reset struct{} `cmd:"" help:"Reset BuildHAT."`
+		Start struct {
+			Port string `kong:"required"`
+		} `cmd:"" help:"Start the BuildHAT."`
 	}
 
 	promptRE = regexp.MustCompile("BHBL>")
@@ -34,41 +36,45 @@ var (
 func main() {
 	cliCtx := kong.Parse(&cli)
 
+	var err error
 	switch cliCtx.Command() {
 	case "start":
-		start(cli.Port)
+		err = start(cli.Start.Port)
 	case "reset":
-		reset()
+		err = reset()
+	}
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
-func start(portName string) {
+func start(portName string) error {
 	err := validatePort(portName)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	port, err := openPort(portName)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	exp, _, err := serialSpawn(port, 10*time.Second, expect.Verbose(true))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	exp.Send("\r")
 
 	_, _, err = exp.Expect(promptRE, 10*time.Second)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	exp.Send("version\r")
 	result, _, err := exp.Expect(versionLineRE, 10*time.Second)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Println(result)
 
@@ -76,26 +82,39 @@ func start(portName string) {
 
 	err = loadFirmware(port, exp)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_, _, err = exp.Expect(promptRE, 10*time.Second)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	exp.Send("reboot\r")
+	return exp.Send("reboot\r")
 }
 
 func reset() error {
 	err := rpio.Open()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
+	log.Println("starting reset")
 
 	resetPin := rpio.Pin(buildHATResetPin)
 	resetPin.Output()
-	resetPin.Toggle()
+
+	bootPin := rpio.Pin(buildHATBootPin)
+	bootPin.Output()
+
+	bootPin.Low()
+	resetPin.Low()
+
+	time.Sleep(100 * time.Millisecond)
+	resetPin.High()
+	time.Sleep(100 * time.Millisecond)
+
+	log.Println("reset complete")
 
 	return nil
 }

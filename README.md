@@ -13,9 +13,9 @@ Read more about it in the [Raspberry Pi Build HAT documentation](https://www.ras
 # Status
 
 * [x] Firmware Uploading
+* [x] Board Reset
 * [ ] Board initialisation and status
 * [ ] Motor control
-* [ ] Board Reset
 
 # License
 
